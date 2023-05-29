@@ -1,0 +1,6 @@
+*.pdf
+*.log
+*.eml
+__pycache__/
+pdf files/
+*.md
