@@ -8,27 +8,26 @@ def json_serial(obj):
   if isinstance(obj, datetime.datetime):
       return obj.strftime('%Y-%m-%d %H:%M:%S')
 
-def dups_checker(item_path):
-    item_name = os.path.basename(item_path).split('.')[0]
-    item_path = os.path.abspath(f'pdf files/{item_name}.pdf')
+def dups_checker(item_name):
+    script_path = os.path.dirname(os.path.abspath(__file__))
+    item_name = os.path.splitext(item_name)[0]
+    item_path = script_path + '\\pdf files\\'+ item_name + '.pdf'
     i = 1
     while os.path.exists(item_path):
         item_name = item_name + "-" + str(i)
-        item_path = item_path.split("\\")
-        item_path[-1] = item_name + '.pdf'
-        item_path = "\\".join(item_path)
+        item_path = script_path + '\\pdf files\\'+ item_name + '.pdf'
         i+=1
     return item_name
 
 def open_eml_file(file_path):
     with open(file_path, 'rb') as email:
         raw_email= email.read()
-    eml_file_path = file_path
-    file_name = os.path.basename(eml_file_path)
-    print(f"\nProcessing : {file_name}")
-    parse_eml(raw_email,eml_file_path)
+    eml_file = os.path.basename(file_path)
+    print(f"\nProcessing : {eml_file}")
+    indi_html = parse_eml(raw_email,eml_file)
+    return indi_html
 
-def parse_eml(raw_email, eml_file_path):
+def parse_eml(raw_email,eml_file):
     eml_parser = EmlParser()
     parsed_eml = eml_parser.decode_email_bytes(raw_email)
     parsed_json_eml = json.loads(json.dumps(parsed_eml, indent=4,default=json_serial))
@@ -39,12 +38,12 @@ def parse_eml(raw_email, eml_file_path):
     date = parsed_json_eml['header']['date']
     attachments = parsed_json_eml['attachment']
     body = parsed_json_eml['body'][0].get('content')
-
-    format_in_html(sender,sent_to,date,subject,attachments,body,eml_file_path)
-
-def format_in_html(sender,sent_to,date,subject,attachments,body,eml_file_path):
+    indi_html = format_in_html(sender,sent_to,subject,date,attachments,body,eml_file)
+    return indi_html
+    
+def format_in_html(sender,sent_to,subject,date,attachments,body,eml_file):
     # format message in HTML Format
-    html =f'''
+    indi_html =f'''
     <html>
     <head>
         <title>Email</title>
@@ -59,42 +58,61 @@ def format_in_html(sender,sent_to,date,subject,attachments,body,eml_file_path):
     '''
 
     for attachment in attachments:
-        html+=f'<li style="margin:0px; padding:5px;">{attachment.get("filename")}</li>'
-
-    html+=f'''
+        indi_html+=f'<li style="margin:0px; padding:5px;">{attachment.get("filename")}</li>'
+    indi_html+=f'''
         </ul>
         <h2 style="background-color:#f1630b; padding:5px;">Message:</h2>
         <p2>{body}</p2>
     </body>
     </html>
     '''
-    gen_pdf_file_name = dups_checker(eml_file_path)
-    pdfkit.from_string(html,f'{gen_pdf_file_name}.pdf')
+    gen_pdf_file_name = dups_checker(eml_file)
+    pdfkit.from_string(indi_html,f'{gen_pdf_file_name}.pdf')
+    eml_file_name = os.path.splitext(eml_file)[0]
+    if gen_pdf_file_name != eml_file_name:
+        print(f"\n\tRenamed - '{eml_file_name}' as '{gen_pdf_file_name}'")
+    return indi_html
 
+def page_break_hmtl():
+    page_break = '''<div style="page-break-before:always;"></div>'''
+    return page_break
 
 def dir_walker(folder_path):
+    combined_html = ''
+    combined_file_name = 'combined_html'
+    eml_count = 0
     try:
         for root,dirs,files in os.walk(folder_path):
             for file_name in files:
                 if os.path.splitext(file_name)[1] == '.eml':
+                    eml_count +=1
                     file_path = os.path.join(root, file_name)
-                    open_eml_file(file_path)
+                    indi_html = open_eml_file(file_path)
+                    if eml_count !=1:
+                        combined_html += page_break_hmtl()
+                    combined_html += indi_html
                 else:
                     continue
+        gen_output_file = dups_checker(combined_file_name)
+        print(f"\nProcessing : {gen_output_file}")
+        pdfkit.from_string(combined_html, f'{gen_output_file}.pdf')
     except Exception as e:
-        print("Error occured. Please try again.")
+        print(f"Error occured. Please try again. - {e}")
     
-
-def move_files(folder_path):
-    destination_dir = folder_path + '\\' + 'pdf files\\'
+def move_files():
+    folder_path = os.path.dirname(os.path.abspath(__file__))
+    destination_dir = folder_path + "\\pdf files\\"
     lis = os.listdir(folder_path)
-    for item in lis:
-        if os.path.isfile(item):
-            if item.split('.')[1] == 'pdf':
-                shutil.move(item,destination_dir)
-            else:
-                continue
-
+    try:
+        for item in lis:
+            if os.path.isfile(item):
+                if os.path.splitext(item)[1] == '.pdf':
+                    shutil.move(item,destination_dir)
+                else:
+                    continue
+        print(f"\nMove Successful! Files moved to '{destination_dir}'")
+    except Exception as e:
+        print(f"Error - {e}")
 
 if __name__ == "__main__":
     if not os.path.isdir("pdf files"):
@@ -120,9 +138,5 @@ if __name__ == "__main__":
         while(os.path.isfile(folder_path) == True):
             folder_path = input("A file path was provided instead of a folder path. Please enter Folder Path: ").strip('"')
         dir_walker(folder_path)
-        move_from_dir = folder_path.split('\\')
-
-    move_from_dir.pop()
-    move_from_dir = "\\".join(move_from_dir)
-    move_files(move_from_dir)
-    print("\nProcess Complete!\n")
+    move_files()
+    print("\nProcess Complete!!\n")
