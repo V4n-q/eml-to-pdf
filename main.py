@@ -79,7 +79,7 @@ def page_break_hmtl():
 
 def dir_walker(folder_path):
     combined_html = ''
-    combined_file_name = 'combined_html'
+    combined_file_name = 'combined_conversion'
     eml_count = 0
     try:
         for root,dirs,files in os.walk(folder_path):
